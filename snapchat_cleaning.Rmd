@@ -5,26 +5,120 @@ date: "3/11/2021"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+libraries
+```{r}
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(UpSetR)
+library(naniar)
+
 ```
 
-## R Markdown
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+```{r}
+setwd("~/Documents/spring21/stat479/project/snapchat_politics/")
+temp <- list.files(pattern="*.csv")
+sc <- purrr::map_df(temp, function(x){
+  data <- read_csv(x)
+  x <- gsub("PoliticalAds_","",x)
+  x <- gsub(".csv","",x)
+  cbind(year = x, data)
+})
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+head(sc)
 
-```{r cars}
-summary(cars)
 ```
 
-## Including Plots
+*CLEANING*
 
-You can also embed plots, for example:
+1. Lets check out the missingness 
+```{r, fig.width=10}
+gg_miss_var(sc)
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+#^^^ histogram doesn’t tell us whether missing data tend to co-occur across a few different dimensions. For that, we can count the different missingness patterns.
+gg_miss_upset(sc)
+#seems like a lot of the missing data is due to geographical targeting and insufficient data collection in regards. We might not care about that in general, QUITE yet.
+
+vis_miss(sc) #LOTS of missing data. must use imputation methods
+
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+2. Frankly, we dont care about geographical radius quite yet, too specified for us currently. Lets filter out some of the variables. Mainly of them have to do an ad's spatial intent, and recording this a multitude of ways.
+```{r}
+colnames(sc)
+
+sc = sc %>%
+  rename(CurrencyCode = `Currency Code`)  %>%
+  rename(RegionsINC = `Regions (Included)`) %>%
+  rename(RegionsEXC = `Regions (Excluded)`)
+
+sc = sc %>%
+  filter(CurrencyCode == 'USD') %>%
+  filter(CountryCode == 'united states') %>%
+  select(-c('Radius Targeting (Included)','Radius Targeting (Excluded)', 'Location Categories (Included)', 'Targeting Carrier (ISP)','Location Categories (Excluded)', 'Electoral Districts (Excluded)', 'Electoral Districts (Included)', 'Metros (Excluded)', 'Metros (Included)', 'CreativeProperties', 'ADID', 'CurrencyCode', 'OsType', 'Postal Codes (Included)', 'Postal Codes (Excluded)', 'AdvancedDemographics', 'CandidateBallotInformation', 'Targeting Connection Type'))
+
+#check missingness again 
+gg_miss_var(sc)
+
+gg_miss_upset(sc)
+
+vis_miss(sc) # better, will be easier to impute
+
+```
+
+
+Table 1: WHO (advertiser) spends the most money?
+```{r}
+
+#grab top 5% of spenders
+big_spenders = sc %>%
+  group_by(PayingAdvertiserName) %>%
+  summarise(total_money = sum(Spend)) %>%
+  filter(quantile(total_money, 0.95)<total_money) %>%
+  arrange(desc(total_money))
+
+big_spenders
+
+#quick visualization
+big_spenders %>% 
+  mutate(PayingAdvertiserName = fct_reorder(PayingAdvertiserName, desc(total_money))) %>% 
+  ggplot() + 
+  geom_col(aes(x = PayingAdvertiserName, y = total_money)) + 
+  xlab('Advertiser') + ylab('Total Money Spent') + 
+  ggtitle('Big Spenders: WHO is Paying the Most') + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+```
+
+
+Table 2: WHERE (location) is the most money spent?
+```{r}
+
+money_states = sc %>%
+  group_by(RegionsINC) %>%
+  summarise(total_money = sum(Spend)) %>%
+  arrange(desc(total_money))
+
+money_states
+
+#quick visualization
+money_states %>% 
+  mutate(RegionsINC = fct_reorder(RegionsINC, desc(total_money))) %>% 
+  ggplot() + 
+  geom_col(aes(x = RegionsINC, y = total_money)) + 
+  xlab('Region') + ylab('Total Money Spent') + 
+  ggtitle('Big Spenders: WHERE Are They Paying') + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  scale_x_discrete(label=abbreviate) + 
+  scale_y_log10() ## keep in mind! not same as big_spenders vis
+```
+
+
+seems like we need to clean up RegionsINC
+```{r}
+
+
+```
+
