@@ -57,7 +57,7 @@ sc = sc %>%
 sc = sc %>%
   filter(CurrencyCode == 'USD') %>%
   filter(CountryCode == 'united states') %>%
-  select(-c('Radius Targeting (Included)','Radius Targeting (Excluded)', 'Location Categories (Included)', 'Targeting Carrier (ISP)','Location Categories (Excluded)', 'Electoral Districts (Excluded)', 'Electoral Districts (Included)', 'Metros (Excluded)', 'Metros (Included)', 'CreativeProperties', 'ADID', 'CurrencyCode', 'OsType', 'Postal Codes (Included)', 'Postal Codes (Excluded)', 'AdvancedDemographics', 'CandidateBallotInformation', 'Targeting Connection Type'))
+  select(-c('Radius Targeting (Included)','Radius Targeting (Excluded)', 'Location Categories (Included)', 'Targeting Carrier (ISP)','Location Categories (Excluded)', 'Electoral Districts (Excluded)', 'Electoral Districts (Included)', 'Metros (Excluded)', 'Metros (Included)', 'CreativeProperties', 'ADID', 'CurrencyCode', 'OsType', 'Postal Codes (Included)', 'Postal Codes (Excluded)', 'AdvancedDemographics', 'CandidateBallotInformation', 'Targeting Connection Type', 'Segments', 'Language', 'CountryCode', 'RegionsEXC'))
 
 #check missingness again 
 gg_miss_var(sc)
@@ -69,7 +69,65 @@ vis_miss(sc) # better, will be easier to impute
 ```
 
 
-Table 1: WHO (advertiser) spends the most money?
+Imputation Time! ENDDATE
+```{r}
+
+#END DATES
+end_dates = sc %>%
+  filter(is.na(EndDate))
+#View(end_dates) 
+#Missing end dates for 2021,2020, 2019, 2018 will be imputed with the end of the next year. I think this is a better assumption then doing 'average' end date.
+
+for (i in 1:nrow(sc)) {
+  if (sc$year[i] == '2018' & is.na(sc$EndDate)[i]) {
+    sc$EndDate[i] = '2018/12/31'
+
+} else if (sc$year[i] == '2019' & is.na(sc$EndDate)[i]) {
+    sc$EndDate[i] = '2019/12/31'
+
+} else if (sc$year[i] == '2020' & is.na(sc$EndDate)[i]) {
+    sc$EndDate[i] = '2020/12/31'
+
+} else if (sc$year[i] == '2021' & is.na(sc$EndDate)[i]) {
+    sc$EndDate[i] = '2021/12/31'
+
+}
+}
+
+#View(sc)
+sum(is.na(sc$EndDate)) #works!
+#lets also change this variable into a #date# and cut it down to disclude the timestamp 
+sc$EndDate = substr(sc$EndDate, 1,10)
+sc$EndDate = as.Date(sc$EndDate, '%Y/%m/%d')
+#lets go ahead and do the same for StartDate
+sc$StartDate = substr(sc$StartDate, 1,10)
+sc$StartDate = as.Date(sc$StartDate, '%Y/%m/%d')
+
+
+#AGE BRACKET, mode imputation? due to categorical class
+sum(is.na(sc$AgeBracket))
+sc$AgeBracket = as.factor(sc$AgeBracket)
+val = unique(sc$AgeBracket[!is.na(sc$AgeBracket)]) 
+my_mode = val[which.max(tabulate(match(sc$AgeBracket, val)))] 
+sc$AgeBracket[is.na(sc$AgeBracket)] = my_mode  
+
+#GENDER, mode imputation? due to categorical class
+sum(is.na(sc$Gender))
+sc$Gender = as.factor(sc$Gender)
+val_g = unique(sc$Gender[!is.na(sc$Gender)]) 
+my_mode_g = val_g[which.max(tabulate(match(sc$Gender, val_g)))] 
+sc$Gender[is.na(sc$Gender)] = my_mode_g 
+
+#RegionsINC, for NAs, why dont we assume all regions... otherwise theres no point to the ad
+sum(is.na(sc$RegionsINC))
+sc$RegionsINC[is.na(sc$RegionsINC)] = 'US'
+sc$RegionsINC = as.factor(sc$RegionsINC)
+
+```
+
+
+ 
+ Table 1: WHO (advertiser) spends the most money?
 ```{r}
 
 #grab top 5% of spenders
@@ -116,9 +174,5 @@ money_states %>%
 ```
 
 
-seems like we need to clean up RegionsINC
-```{r}
 
-
-```
 
