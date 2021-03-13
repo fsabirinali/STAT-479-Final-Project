@@ -25,7 +25,7 @@ sc <- purrr::map_df(temp, function(x){
   x <- gsub(".csv","",x)
   cbind(year = x, data)
 })
-
+dim(sc)
 head(sc)
 
 ```
@@ -123,6 +123,8 @@ sum(is.na(sc$RegionsINC))
 sc$RegionsINC[is.na(sc$RegionsINC)] = 'US'
 sc$RegionsINC = as.factor(sc$RegionsINC)
 
+View(sc)
+
 ```
 
 
@@ -157,6 +159,7 @@ Table 2: WHERE (location) is the most money spent?
 money_states = sc %>%
   group_by(RegionsINC) %>%
   summarise(total_money = sum(Spend)) %>%
+  filter(quantile(total_money, 0.95)<total_money) %>%
   arrange(desc(total_money))
 
 money_states
@@ -173,6 +176,16 @@ money_states %>%
   scale_y_log10() ## keep in mind! not same as big_spenders vis
 ```
 
+Deriving - most targeted demographic?
+```{r}
+target_dem = sc %>%
+  group_by(AgeBracket, Gender) %>%
+  summarise(total_money = sum(Spend)) %>%
+  filter(quantile(total_money, 0.95)<total_money) %>%
+  arrange(desc(total_money))
+  
+target_dem
+```
 
 
 
