@@ -1,0 +1,378 @@
+---
+title: "stat479_MS3"
+author: "grace douglas"
+date: "4/9/2021"
+output: html_document
+---
+
+
+libraries
+```{r}
+library(dplyr)
+library(ggplot2)
+#library(tidyverse)
+library(UpSetR)
+library(naniar)
+library(readr)
+
+```
+
+
+```{r}
+setwd("~/Documents/spring21/stat479/project/snapchat_politics/")
+temp <- list.files(pattern="*.csv")
+sc <- purrr::map_df(temp, function(x){
+  data <- read_csv(x)
+  x <- gsub("PoliticalAds_","",x)
+  x <- gsub(".csv","",x)
+  cbind(year = x, data)
+})
+
+head(sc)
+
+```
+
+*CLEANING*
+
+1. Lets check out the missingness 
+```{r, fig.width=10}
+gg_miss_var(sc)
+
+#^^^ histogram doesn’t tell us whether missing data tend to co-occur across a few different dimensions. For that, we can count the different missingness patterns.
+gg_miss_upset(sc)
+#seems like a lot of the missing data is due to geographical targeting and insufficient data collection in regards. We might not care about that in general, QUITE yet.
+
+vis_miss(sc) #LOTS of missing data. must use imputation methods
+
+```
+
+
+2. Frankly, we dont care about geographical radius quite yet, too specified for us currently. Lets filter out some of the variables. Mainly of them have to do an ad's spatial intent, and recording this a multitude of ways.
+```{r}
+colnames(sc)
+
+sc = sc %>%
+  rename(CurrencyCode = `Currency Code`)  %>%
+  rename(RegionsINC = `Regions (Included)`) %>%
+  rename(RegionsEXC = `Regions (Excluded)`)
+
+sc = sc %>%
+  filter(CurrencyCode == 'USD') %>%
+  filter(CountryCode == 'united states') %>%
+  select(-c('Radius Targeting (Included)','Radius Targeting (Excluded)', 'Location Categories (Included)', 'Targeting Carrier (ISP)','Location Categories (Excluded)', 'Electoral Districts (Excluded)', 'Electoral Districts (Included)', 'Metros (Excluded)', 'Metros (Included)', 'CreativeProperties', 'ADID', 'CurrencyCode', 'OsType', 'Postal Codes (Included)', 'Postal Codes (Excluded)', 'AdvancedDemographics', 'CandidateBallotInformation', 'Targeting Connection Type', 'Segments', 'Language', 'CountryCode', 'RegionsEXC'))
+
+#check missingness again 
+gg_miss_var(sc)
+
+gg_miss_upset(sc)
+
+vis_miss(sc) # better, will be easier to impute
+
+```
+
+
+
+Imputation Time! ENDDATE
+```{r}
+
+#END DATES
+end_dates = sc %>%
+  filter(is.na(EndDate))
+#View(end_dates) 
+#Missing end dates for 2021,2020, 2019, 2018 will be imputed with the end of the next year. I think this is a better assumption then doing 'average' end date.
+
+for (i in 1:nrow(sc)) {
+  if (sc$year[i] == '2018' & is.na(sc$EndDate)[i]) {
+    sc$EndDate[i] = '2018/12/31'
+
+} else if (sc$year[i] == '2019' & is.na(sc$EndDate)[i]) {
+    sc$EndDate[i] = '2019/12/31'
+
+} else if (sc$year[i] == '2020' & is.na(sc$EndDate)[i]) {
+    sc$EndDate[i] = '2020/12/31'
+
+} else if (sc$year[i] == '2021' & is.na(sc$EndDate)[i]) {
+    sc$EndDate[i] = '2021/12/31'
+
+}
+}
+
+#View(sc)
+sum(is.na(sc$EndDate)) #works!
+#lets also change this variable into a #date# and cut it down to disclude the timestamp 
+sc$EndDate = substr(sc$EndDate, 1,10)
+sc$EndDate = as.Date(sc$EndDate, '%Y/%m/%d')
+#lets go ahead and do the same for StartDate
+sc$StartDate = substr(sc$StartDate, 1,10)
+sc$StartDate = as.Date(sc$StartDate, '%Y/%m/%d')
+
+
+#AGE BRACKET, mode imputation? due to categorical class
+sum(is.na(sc$AgeBracket))
+sc$AgeBracket = as.factor(sc$AgeBracket)
+val = unique(sc$AgeBracket[!is.na(sc$AgeBracket)]) 
+my_mode = val[which.max(tabulate(match(sc$AgeBracket, val)))] 
+sc$AgeBracket[is.na(sc$AgeBracket)] = my_mode  
+
+#GENDER, mode imputation? due to categorical class
+sum(is.na(sc$Gender))
+sc$Sex = as.factor(sc$Gender)
+sc = sc %>% select(-Gender)
+val_g = unique(sc$Sex[!is.na(sc$Sex)]) 
+my_mode_g = val_g[which.max(tabulate(match(sc$Sex, val_g)))] 
+sc$Sex[is.na(sc$Sex)] = my_mode_g 
+
+#RegionsINC, for NAs, why dont we assume all regions... otherwise theres no point to the ad
+sum(is.na(sc$RegionsINC))
+sc$RegionsINC[is.na(sc$RegionsINC)] = 'US'
+sc$RegionsINC = as.factor(sc$RegionsINC)
+
+#Interests, clean up
+head(sc)
+rm_na_i = sc$Interests[!is.na(sc$Interests)]
+split_i = strsplit(rm_na_i, ",")
+split_i = unlist(split_i)
+split_i = unique(split_i)
+
+#AGE BRACKET, clean up
+levels(sc$AgeBracket)
+
+```
+
+shiny time - who are biggest spenders
+```{r}
+library(shiny)
+library(plotly)
+library(forcats)
+
+#ggplot object
+#grab top 5% of spenders
+big_spenders = sc %>%
+  group_by(PayingAdvertiserName) %>%
+  summarise(total_money = sum(Spend)) %>%
+  filter(quantile(total_money, 0.95)<total_money) %>%
+  arrange(desc(total_money))
+
+big_spenders
+
+#quick visualization
+big_spenders %>% 
+  mutate(PayingAdvertiserName = fct_reorder(PayingAdvertiserName, desc(total_money))) %>% 
+  ggplot() + 
+  geom_col(aes(x = PayingAdvertiserName, y = total_money)) + 
+  xlab('Advertiser') + ylab('Total Money Spent') + 
+  ggtitle('Big Spenders: WHO is Paying the Most') + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+#try to convert to plotly
+ggplotly(
+  p = ggplot2::last_plot(),
+  width = NULL,
+  height = NULL,
+  tooltip = "all",
+  dynamicTicks = FALSE,
+  layerData = 1,
+  originalData = TRUE,
+  source = "A"
+)
+
+```
+
+
+shiny - where are biggest spenders
+```{r, fig.width = 10, fig.height = 10}
+library(shiny)
+library(plotly)
+library(leaflet)
+
+money_states = sc %>%
+  group_by(RegionsINC) %>%
+  summarise(total_money = sum(Spend)) %>%
+  arrange(desc(total_money))
+
+money_states
+
+#quick visualization
+money_states %>% 
+  mutate(RegionsINC = fct_reorder(RegionsINC, desc(total_money))) %>% 
+  ggplot() + 
+  geom_col(aes(x = RegionsINC, y = total_money)) + 
+  xlab('Region') + ylab('Total Money Spent') + 
+  ggtitle('Big Spenders: WHERE Are They Paying') + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  scale_x_discrete(label=abbreviate) + 
+  scale_y_log10() +## keep in mind! not same as big_spenders vis
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+
+df.sf = st_as_sf(t_long, coords = c('x','y')) %>% st_set_crs(4326) %>% st_transform( 4326 ) 
+leaflet() %>% addTiles() %>% addMarkers( data = df.sf )
+
+ggplotly(
+  p = ggplot2::last_plot(),
+  width = NULL,
+  height = NULL,
+  tooltip = "all",
+  dynamicTicks = FALSE,
+  layerData = 1,
+  originalData = TRUE,
+  source = "A"
+)
+
+```
+
+
+shiny - what ages are being targeted?
+```{r}
+
+library(shiny)
+library(plotly)
+
+head(sc)
+
+#ggplot object
+#grab top 5% of spenders
+age_oriented = sc %>%
+  group_by(AgeBracket) %>%
+  summarise(total_money = sum(Spend)) %>%
+  arrange(desc(total_money))
+
+age_oriented
+
+#quick visualization
+age_oriented %>% 
+  mutate(AgeBracket = fct_reorder(AgeBracket, desc(total_money))) %>% 
+  ggplot() + 
+  geom_col(aes(x = AgeBracket, y = total_money)) + 
+  xlab('Age Bracket') + ylab('Total Money Spent') + 
+  ggtitle('Ageism?') + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+#try to convert to plotly
+ggplotly(
+  p = ggplot2::last_plot(),
+  width = NULL,
+  height = NULL,
+  tooltip = "all",
+  dynamicTicks = FALSE,
+  layerData = 1,
+  originalData = TRUE,
+  source = "A"
+)
+
+
+```
+
+shiny - what sex is being targeted?
+```{r}
+library(shiny)
+library(plotly)
+
+head(sc)
+
+#ggplot object
+#grab top 5% of spenders
+sex_oriented = sc %>%
+  group_by(Sex) %>%
+  summarise(total_money = sum(Spend)) %>%
+  arrange(desc(total_money))
+
+sex_oriented
+
+#quick visualization
+sex_oriented %>% 
+  mutate(Sex = fct_reorder(Sex, desc(total_money))) %>% 
+  ggplot() + 
+  geom_col(aes(x = Sex, y = total_money)) + 
+  xlab('Sex') + ylab('Total Money Spent') + 
+  ggtitle('Sexism?') + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  scale_y_log10()
+
+#try to convert to plotly
+ggplotly(
+  p = ggplot2::last_plot(),
+  width = NULL,
+  height = NULL,
+  tooltip = "all",
+  dynamicTicks = FALSE,
+  layerData = 1,
+  originalData = TRUE,
+  source = "A"
+)
+
+View(sc)
+
+```
+
+shiny - are you interested in any of these activities?
+```{r}
+library(shiny)
+library(plotly)
+
+head(sc)
+
+gender_oriented = sc %>%
+  group_by(Gender) %>%
+  summarise(total_money = sum(Spend)) %>%
+  arrange(desc(total_money))
+
+gender_oriented
+
+#quick visualization
+gender_oriented %>% 
+  mutate(Gender = fct_reorder(Gender, desc(total_money))) %>% 
+  ggplot() + 
+  geom_col(aes(x = Gender, y = total_money)) + 
+  xlab('Gender') + ylab('Total Money Spent') + 
+  ggtitle('Sexism?') + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  scale_y_log10()
+
+#try to convert to plotly
+ggplotly(
+  p = ggplot2::last_plot(),
+  width = NULL,
+  height = NULL,
+  tooltip = "all",
+  dynamicTicks = FALSE,
+  layerData = 1,
+  originalData = TRUE,
+  source = "A"
+)
+
+```
+
+
+shiny - make geographic realm?
+shiny - can we use creative URL to show them specific snapchat ads that targeted them?
+
+
+```{r}
+
+ui <- fluidPage(
+  selectizeInput(
+    inputId = "cities", 
+    label = "Select a city", 
+    choices = unique(txhousing$city), 
+    selected = "Abilene",
+    multiple = TRUE
+  ),
+  plotlyOutput(outputId = "p")
+)
+
+server <- function(input, output, ...) {
+  output$p <- renderPlotly({
+    plot_ly(txhousing, x = ~date, y = ~median) %>%
+      filter(city %in% input$cities) %>%
+      group_by(city) %>%
+      add_lines()
+  })
+}
+
+shinyApp(ui, server)
+
+```
+
+
