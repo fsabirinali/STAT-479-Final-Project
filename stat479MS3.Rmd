@@ -8,12 +8,15 @@ output: html_document
 
 libraries
 ```{r}
+library(plyr)
 library(dplyr)
 library(ggplot2)
 #library(tidyverse)
 library(UpSetR)
 library(naniar)
 library(readr)
+library(tidyr)
+
 
 ```
 
@@ -52,8 +55,8 @@ vis_miss(sc) #LOTS of missing data. must use imputation methods
 colnames(sc)
 
 sc = sc %>%
-  rename(CurrencyCode = `Currency Code`)  %>%
-  rename(RegionsINC = `Regions (Included)`) %>%
+  rename(CurrencyCode = 'Currency Code')  %>%
+  rename(RegionsINC = "Regions (Included)") %>%
   rename(RegionsEXC = `Regions (Excluded)`)
 
 sc = sc %>%
@@ -74,6 +77,7 @@ vis_miss(sc) # better, will be easier to impute
 
 Imputation Time! ENDDATE
 ```{r}
+
 
 #END DATES
 end_dates = sc %>%
@@ -128,15 +132,90 @@ sc$RegionsINC[is.na(sc$RegionsINC)] = 'US'
 sc$RegionsINC = as.factor(sc$RegionsINC)
 
 #Interests, clean up
-head(sc)
-rm_na_i = sc$Interests[!is.na(sc$Interests)]
-split_i = strsplit(rm_na_i, ",")
-split_i = unlist(split_i)
-split_i = unique(split_i)
+sc$Interests = strsplit(sc$Interests, ",")
+sc = sc %>% unnest_longer(Interests)
+
+#RegionINC, clean up 
+sc$RegionsINC = strsplit(as.character(sc$RegionsINC), ",")
+sc = sc %>% unnest_longer(RegionsINC)
+
+
 
 #AGE BRACKET, clean up
+
+for (age in sc$AgeBracket){
+  if (grepl("[+]", age) == TRUE){
+    age = strsplit(age, '+')
+    age = unlist(age)
+    age = glue::glue("{age[1]}{age[2]}")
+    age = as.list(seq(age, 50, by = 1))
+
 levels(sc$AgeBracket)
 
+sc$AgeBracket = revalue(sc$AgeBracket, c("14+" = "14-49", 
+                              "15+" = "15-49", 
+                              "16-" = "14-16", 
+                              "16+" = "16-49", 
+                              "17-" = "14-17",
+                              "17+" = "17-49",
+                              "18-" = "14-18",
+                              "18+" = "18-49",
+                              "19-" = "14-19",
+                              "19+" = "19-49",
+                              "20-" = "14-20",
+                              "20+" = "20-49",
+                              "21-" = "14-21",
+                              "21+" = "21-49",
+                              "22+" = "22-49",
+                              "23+" = "23-49",
+                              "24-" = "14-24",
+                              "24+" = "24-49",
+                              "25-" = "14-25",
+                              "25+" = "25-49",
+                              "26-" = "14-26",
+                              "26+" = "26-49",
+                              "27-" = "14-27",
+                              "27+" = "27-49",
+                              "29-" = "14-29",
+                              "30-" = "14-30",
+                              "30+" = "30-49",
+                              "31+" = "31-49",
+                              "32-" = "14-32",
+                              "33+" = "33-49",
+                              "34-" = "14-34",
+                              "35-" = "14-35", 
+                              "35+" = "35-49",
+                              "35++"= "35-49",
+                              "39-" = "14-39", 
+                              "40-" = "14-40", 
+                              "49-" = "14-49"))
+
+
+q = sc$AgeBracket[1]
+q
+
+q = strsplit(q, '-')
+q = unlist(q)
+q[2]
+q = list(seq(q[1],q[2]))
+class(q)
+q
+
+as.numeric(sc$AgeBracket)
+
+sc$AgeBracket = as.character(sc$AgeBracket)
+sc$AgeBracket = gsub("-",":",sc$AgeBracket)
+lapply(sc$AgeBracket, seq())
+#sc$AgeBracket = strsplit(sc$AgeBracket, ":")
+
+for (age in 1:length(sc$AgeBracket)){
+  sc$AgeBracket[age] = unlist(strsplit(sc$AgeBracket[age], '-'))
+  sc$AgeBracket[age] = list(seq(sc$AgeBracket[age][1],sc$AgeBracket[age][2]))
+}
+
+#sc$AgeBracket = strsplit(sc$AgeBracket, " ")
+sc = sc %>% unnest_longer(AgeBracket)
+View(sc)
 ```
 
 shiny time - who are biggest spenders
@@ -206,8 +285,8 @@ money_states %>%
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank())
 
-df.sf = st_as_sf(t_long, coords = c('x','y')) %>% st_set_crs(4326) %>% st_transform( 4326 ) 
-leaflet() %>% addTiles() %>% addMarkers( data = df.sf )
+#df.sf = st_as_sf(t_long, coords = c('x','y')) %>% st_set_crs(4326) %>% st_transform( 4326 ) 
+#leaflet() %>% addTiles() %>% addMarkers( data = df.sf )
 
 ggplotly(
   p = ggplot2::last_plot(),
@@ -302,7 +381,7 @@ ggplotly(
   source = "A"
 )
 
-View(sc)
+
 
 ```
 
