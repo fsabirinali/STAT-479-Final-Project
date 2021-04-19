@@ -33,6 +33,7 @@ sc <- purrr::map_df(temp, function(x){
 
 head(sc)
 
+
 ```
 
 *CLEANING*
@@ -219,7 +220,7 @@ View(sc)
 ```
 
 shiny time - who are biggest spenders
-```{r}
+```{r, fig.width = 8, fig.height=8}
 library(shiny)
 library(plotly)
 library(forcats)
@@ -227,28 +228,35 @@ library(forcats)
 #ggplot object
 #grab top 5% of spenders
 big_spenders = sc %>%
-  group_by(PayingAdvertiserName) %>%
+  group_by(PayingAdvertiserName, year) %>%
   summarise(total_money = sum(Spend)) %>%
   filter(quantile(total_money, 0.95)<total_money) %>%
-  arrange(desc(total_money))
+  arrange(desc(total_money)) %>%
+  mutate(PayingAdvertiserName = fct_reorder(PayingAdvertiserName, desc(total_money))) #WHY WONT IT REORDER UGHGISMAOCJBANKMKC!!!!!!!
 
 big_spenders
 
 #quick visualization
-big_spenders %>% 
-  mutate(PayingAdvertiserName = fct_reorder(PayingAdvertiserName, desc(total_money))) %>% 
+big_spender_gg = big_spenders %>% 
   ggplot() + 
-  geom_col(aes(x = PayingAdvertiserName, y = total_money)) + 
-  xlab('Advertiser') + ylab('Total Money Spent') + 
+  geom_col(aes(x = PayingAdvertiserName, 
+               y = total_money, 
+               fill = year,
+               text = paste('Advertiser: ', PayingAdvertiserName,
+                            '<br>Total Money: $',total_money, 
+                            '<br>Year:', year))) + 
+  xlab('Advertiser') + 
+  ylab('Total Money Spent') + 
   ggtitle('Big Spenders: WHO is Paying the Most') + 
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  scale_y_log10() 
+  
 #try to convert to plotly
 ggplotly(
-  p = ggplot2::last_plot(),
-  width = NULL,
-  height = NULL,
-  tooltip = "all",
+  p = big_spender_gg,
+  width = 1000,
+  height = 700,
+  tooltip = 'text',
   dynamicTicks = FALSE,
   layerData = 1,
   originalData = TRUE,
@@ -263,6 +271,8 @@ shiny - where are biggest spenders
 library(shiny)
 library(plotly)
 library(leaflet)
+library(spData)
+library(sf)
 
 money_states = sc %>%
   group_by(RegionsINC) %>%
@@ -272,24 +282,23 @@ money_states = sc %>%
 money_states
 
 #quick visualization
-money_states %>% 
+money_states_gg = money_states %>% 
+  filter(RegionsINC != 'US') %>%
   mutate(RegionsINC = fct_reorder(RegionsINC, desc(total_money))) %>% 
   ggplot() + 
   geom_col(aes(x = RegionsINC, y = total_money)) + 
-  xlab('Region') + ylab('Total Money Spent') + 
+  xlab('Region') + ylab('Total Money Spent (log10)') + 
   ggtitle('Big Spenders: WHERE Are They Paying') + 
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
-  scale_x_discrete(label=abbreviate) + 
-  scale_y_log10() +## keep in mind! not same as big_spenders vis
-  theme(axis.title.x=element_blank(),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank())
+  scale_x_discrete(label=abbreviate)+ 
+  scale_y_log10() + ## keep in mind! not same as big_spenders vis
+  
 
 #df.sf = st_as_sf(t_long, coords = c('x','y')) %>% st_set_crs(4326) %>% st_transform( 4326 ) 
 #leaflet() %>% addTiles() %>% addMarkers( data = df.sf )
 
 ggplotly(
-  p = ggplot2::last_plot(),
+  p = money_states_gg,
   width = NULL,
   height = NULL,
   tooltip = "all",
