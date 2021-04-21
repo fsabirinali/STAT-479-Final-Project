@@ -56,9 +56,9 @@ vis_miss(sc) #LOTS of missing data. must use imputation methods
 colnames(sc)
 
 sc = sc %>%
-  rename(CurrencyCode = 'Currency Code')  %>%
-  rename(RegionsINC = "Regions (Included)") %>%
-  rename(RegionsEXC = `Regions (Excluded)`)
+  dplyr::rename(CurrencyCode = "Currency Code")  %>%
+  dplyr::rename(RegionsINC = "Regions (Included)") %>%
+  dplyr::rename(RegionsEXC = "Regions (Excluded)")
 
 sc = sc %>%
   filter(CurrencyCode == 'USD') %>%
@@ -141,16 +141,6 @@ sc$RegionsINC = strsplit(as.character(sc$RegionsINC), ",")
 sc = sc %>% unnest_longer(RegionsINC)
 
 
-
-#AGE BRACKET, clean up
-
-for (age in sc$AgeBracket){
-  if (grepl("[+]", age) == TRUE){
-    age = strsplit(age, '+')
-    age = unlist(age)
-    age = glue::glue("{age[1]}{age[2]}")
-    age = as.list(seq(age, 50, by = 1))
-
 levels(sc$AgeBracket)
 
 sc$AgeBracket = revalue(sc$AgeBracket, c("14+" = "14-49", 
@@ -191,33 +181,29 @@ sc$AgeBracket = revalue(sc$AgeBracket, c("14+" = "14-49",
                               "40-" = "14-40", 
                               "49-" = "14-49"))
 
-
-q = sc$AgeBracket[1]
-q
-
-q = strsplit(q, '-')
-q = unlist(q)
-q[2]
-q = list(seq(q[1],q[2]))
-class(q)
-q
-
-as.numeric(sc$AgeBracket)
-
 sc$AgeBracket = as.character(sc$AgeBracket)
-sc$AgeBracket = gsub("-",":",sc$AgeBracket)
-lapply(sc$AgeBracket, seq())
-#sc$AgeBracket = strsplit(sc$AgeBracket, ":")
 
-for (age in 1:length(sc$AgeBracket)){
-  sc$AgeBracket[age] = unlist(strsplit(sc$AgeBracket[age], '-'))
-  sc$AgeBracket[age] = list(seq(sc$AgeBracket[age][1],sc$AgeBracket[age][2]))
+library(stringr)
+index = 0
+for (age in sc$AgeBracket){
+  index = index+1
+  if (grepl("\\d\\d-\\d\\d",age)){
+    l <- as.numeric(unlist(c(str_extract_all(age, "\\d\\d"))))
+    sc$AgeBracket[index] <- paste(c(l[1]:l[2]),sep = " ",collapse = ",")
+  }
 }
 
-#sc$AgeBracket = strsplit(sc$AgeBracket, " ")
+#AgeBracket, clean up 
+sc$AgeBracket = strsplit(as.character(sc$AgeBracket), ",")
 sc = sc %>% unnest_longer(AgeBracket)
-View(sc)
+
 ```
+
+
+
+
+
+
 
 shiny time - who are biggest spenders
 ```{r, fig.width = 8, fig.height=8}
