@@ -197,6 +197,9 @@ for (age in sc$AgeBracket){
 sc$AgeBracket = strsplit(as.character(sc$AgeBracket), ",")
 sc = sc %>% unnest_longer(AgeBracket)
 
+write.table(sc, "~/Documents/spring21/stat479/sc_clean.txt",row.names=FALSE,col.names=TRUE)
+
+
 ```
 
 
@@ -350,7 +353,7 @@ head(sc)
 sex_oriented = sc %>%
   group_by(Sex) %>%
   summarise(total_money = sum(Spend)) %>%
-  arrange(desc(total_money))
+  arrange(desc(total_money)) 
 
 sex_oriented
 
